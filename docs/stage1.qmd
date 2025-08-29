@@ -1,0 +1,1676 @@
+---
+title: "Malignant neoplasms of digestive organs C15-C26 in Chile from 2019 to 2023"
+author:
+  - name: "María Fernanda Gallego Muga"
+    email: "maria.gallego.muga@ug.uchile.cl"
+    orcid: "0000-0000-0000-0000"
+  - name: "Gregorio Palacios Pino"
+    email: "gregorio.palacios@ug.uchile.cl"
+    orcid: "0000-0000-0000-0000"
+  - name: "Valentina Meilan Ip Francesconi"
+    email: "valentina.ip@ug.uchile.cl "
+    orcid: "0000-0000-0000-0000"
+  - name: "Amaru Simón Agüero Jiménez"
+    email: "aaguero@miaundes.cl"
+    orcid: "0000-0001-7336-1833"
+date: "`r Sys.Date()`"
+lang: es
+format:
+  html:
+    smooth-scroll: true
+    toc: true
+    toc-depth: 6
+    toc-location: right
+    number-sections: true
+    number-depth: 6
+    code-fold: true
+    bibliography: ref.bib
+    csl: apa-numeric-superscript.csl
+    fig-cap-location: bottom
+#    css: styles.css
+execute:
+  warning: false #que los chunks no arrojen mensajes de emergencia
+  message: false #que los chunks no arrojen mensajes
+  fig-width: 12 #ancho de las figuras en el documento
+  fig-height: 10 #alto de las figuras
+---
+
+# Exploratory data analysis
+```{r}
+# ==========================
+# Load/Install packages
+# ==========================
+use_packages <- function(pkgs){
+  new_pkgs <- pkgs[!(pkgs %in% installed.packages()[,"Package"])]
+  if(length(new_pkgs)) install.packages(new_pkgs, dependencies = TRUE)
+  invisible(lapply(pkgs, library, character.only = TRUE))
+}
+
+# Lista completa de paquetes necesarios desde el inicio
+# IMPORTANTE: MASS se carga antes de tidyverse para evitar conflictos con select()
+use_packages(c(
+  "MASS",           # Statistical functions (loaded first to avoid conflicts)
+  "tidyverse",      # Data manipulation and ggplot2 (loaded after MASS)
+  "readxl",         # Read Excel files
+  "knitr",          # Report generation
+  "kableExtra",     # Table formatting
+  "lubridate",      # Date handling
+  "htmltools",      # HTML tools
+  "viridis",        # Color palettes
+  "reshape2",       # Data reshaping
+  "glmmTMB",        # Mixed models
+  "lme4",           # Linear mixed effects
+  "pROC",           # ROC curves
+  "caret",          # Machine learning
+  "ResourceSelection", # Hosmer-Lemeshow test
+  "car",            # Regression diagnostics
+  "patchwork"       # Combine plots
+))
+
+Sys.setenv("VROOM_CONNECTION_SIZE" = 10000000000)
+base_path <- gsub("/docs", "", getwd())
+```
+
+
+```{r}
+# Define output directory and file
+output_dir <- file.path(base_path, "output_files")
+output_file <- file.path(output_dir, "data_cancer_processed.rds")
+
+# Create output directory if it doesn't exist
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+# Check if processed data already exists
+if (file.exists(output_file)) {
+  # Load existing data
+  data_cancer <- readRDS(output_file)
+  
+} else {
+  # Create new database
+  
+  # ==========================
+  # Load and prepare data from 2019-2023
+  # ==========================
+  years <- 2019:2023
+  all_data <- list()
+  
+  for (year in years) {
+    file_pattern <- paste0("GRD_PUBLICO_.*", year, ".*\\.csv$")
+    file_path <- list.files(
+      file.path(base_path, "data"),
+      pattern = file_pattern,
+      full.names = TRUE
+    )
+    
+    if (length(file_path) > 0) {
+      year_data <- readr::read_delim(
+        file_path, delim = "|", escape_double = FALSE,
+        col_types = cols(.default = col_character(),
+                         IR_29301_COD_GRD = col_number()),
+        trim_ws = TRUE
+      )
+      year_data$year <- year
+      all_data[[as.character(year)]] <- year_data
+    }
+  }
+  
+  # Combine all years into single dataframe
+  data_all_years <- bind_rows(all_data)
+  
+  # Clean up memory
+  rm(all_data)
+  
+  # ==========================
+  # Load catalogs
+  # ==========================
+  codigos_grd <- readxl::read_excel(file.path(base_path, "data/códigos grd.xlsx"), sheet = "IR - GRD") |>
+    `colnames<-`(c("IR_29301_COD_GRD", "COD_GRD_CAT"))
+  codigos_hosp <- readxl::read_excel(file.path(base_path, "data/códigos grd.xlsx"), sheet = "Hospitales") |>
+    `colnames<-`(c("COD_HOSPITAL", "COD_HOSPITAL_CAT")) |>
+    mutate(COD_HOSPITAL = as.character(COD_HOSPITAL))
+  codigos_pab <- readxl::read_excel(file.path(base_path, "data/códigos grd.xlsx"), sheet = "Tipo de Pabellon") |>
+    `colnames<-`(c("USOSPABELLON", "COD_PABELLON_CAT")) |>
+    mutate(USOSPABELLON = as.character(USOSPABELLON))
+  
+  # Join catalogs
+  data_all_years <- data_all_years |>
+    full_join(codigos_grd,  by = "IR_29301_COD_GRD") |>
+    full_join(codigos_hosp, by = "COD_HOSPITAL") |>
+    full_join(codigos_pab,  by = "USOSPABELLON")
+  
+  # Clean up catalogs
+  rm(codigos_grd, codigos_hosp, codigos_pab)
+  
+  # ==========================
+  # Filter patients with target cancers
+  # ==========================
+  icd_target_primary <- c("C16","C18","C19","C20","C23","C25")
+  all_diag_cols <- paste0("DIAGNOSTICO", 1:35)
+  all_diag_cols <- intersect(all_diag_cols, names(data_all_years))
+  
+  # Normalize diagnostic fields
+  for(col in all_diag_cols){
+    data_all_years[[paste0(col, "_NORM")]] <- str_to_upper(str_trim(data_all_years[[col]]))
+  }
+  
+  # Filter function
+  has_target_cancer <- function(row){
+    diag_values <- unlist(row)
+    diag_values <- diag_values[!is.na(diag_values) & diag_values != ""]
+    any(str_detect(diag_values, paste0("^(", paste(icd_target_primary, collapse = "|"), ")")))
+  }
+  
+  # Apply filter
+  norm_cols <- paste0(all_diag_cols, "_NORM")
+  data_norm_subset <- data_all_years[, norm_cols]
+  has_cancer_vector <- apply(data_norm_subset, 1, has_target_cancer)
+  data_cancer <- data_all_years[has_cancer_vector, ] |>
+    dplyr::select(-ends_with("_NORM"))
+  
+  # Clean up large intermediate objects
+  rm(data_all_years, data_norm_subset, has_cancer_vector, norm_cols)
+  
+  # ==========================
+  # Calculate age and classify cancer site based on ALL diagnostic fields
+  # ==========================
+  
+  # Function to determine cancer site from all diagnoses
+  determine_cancer_site <- function(row) {
+    diag_fields <- row[grep("^DIAGNOSTICO[0-9]+$", names(row))]
+    
+    for (diag in diag_fields) {
+      if (!is.na(diag) && diag != "") {
+        diag_upper <- str_to_upper(str_trim(diag))
+        
+        if (str_starts(diag_upper, "C16")) return("Stomach")
+        if (str_starts(diag_upper, "C18") | str_starts(diag_upper, "C19") | str_starts(diag_upper, "C20")) return("Colorectal")
+        if (str_starts(diag_upper, "C25")) return("Pancreas")
+        if (str_starts(diag_upper, "C23")) return("Gallbladder")
+      }
+    }
+    return("Other/Secondary")
+  }
+  
+  # Determine which diagnostic position contains the cancer
+  determine_cancer_position <- function(row) {
+    for (i in 1:35) {
+      field_name <- paste0("DIAGNOSTICO", i)
+      if (field_name %in% names(row)) {
+        diag <- row[[field_name]]
+        if (!is.na(diag) && diag != "") {
+          diag_upper <- str_to_upper(str_trim(diag))
+          
+          if (str_starts(diag_upper, "C16") | 
+              str_starts(diag_upper, "C18") | 
+              str_starts(diag_upper, "C19") | 
+              str_starts(diag_upper, "C20") |
+              str_starts(diag_upper, "C23") | 
+              str_starts(diag_upper, "C25")) {
+            return(i)
+          }
+        }
+      }
+    }
+    return(NA)
+  }
+  
+  data_cancer <- data_cancer |>
+    mutate(
+      cancer_site = apply(data_cancer, 1, determine_cancer_site),
+      diagnostic_position = apply(data_cancer, 1, determine_cancer_position),
+      # Handle different date formats by year
+      # Birth date always in DD-MM-YYYY format
+      FECHA_NACIMIENTO = as.Date(FECHA_NACIMIENTO, format = "%Y-%m-%d"),
+      # Admission and discharge dates: YYYY-MM-DD for 2019-2022, DD-MM-YYYY for 2023
+      FECHA_INGRESO = if_else(
+        year == 2023,
+        as.Date(FECHA_INGRESO, format = "%d-%m-%Y"),
+        as.Date(FECHA_INGRESO, format = "%Y-%m-%d")
+      ),
+      FECHAALTA = if_else(
+        year == 2023,
+        as.Date(FECHAALTA, format = "%d-%m-%Y"),
+        as.Date(FECHAALTA, format = "%Y-%m-%d")
+      ),
+      EDAD = round(as.numeric(difftime(FECHA_INGRESO, FECHA_NACIMIENTO, units = "days")) / 365.25, 0),
+      length_of_stay = as.numeric(difftime(FECHAALTA, FECHA_INGRESO, units = "days")),
+      # Factor variables for severity and mortality risk
+      IR_29301_SEVERIDAD = factor(IR_29301_SEVERIDAD, 
+                                  levels = c("1", "2", "3"), 
+                                  labels = c("Low", "Medium", "High")),
+      IR_29301_MORTALIDAD = factor(IR_29301_MORTALIDAD, 
+                                   levels = c("1", "2", "3"), 
+                                   labels = c("Low risk", "Medium risk", "High risk")),
+      # Classify admission services
+      service_category = case_when(
+        str_detect(SERVICIOINGRESO, "UNIDAD DE CUIDADOS INTENSIVOS|CUIDADOS") ~ "ICU",
+        str_detect(SERVICIOINGRESO, "UNIDAD DE TRATAMIENTO INTERMEDIO|UTI") ~ "ITU",
+        str_detect(SERVICIOINGRESO, "AGUDOS|CIRUGÍA|RECUPERACIÓN|MEDICO-QUIRURGICO|MÉDICO QUIRÚRGICO|MQ PEDIATRIA|MEDICO QUIRÚRGICOS") ~ "MS",
+        TRUE ~ "Others"
+      )
+    ) |>
+    filter(cancer_site != "Other/Secondary") |>
+    filter(SEXO != "DESCONOCIDO")
+  
+  # ==========================
+  # Define comorbidity groups
+  # ==========================
+  
+  icd3_norm <- function(x){
+    x <- stringr::str_to_upper(stringr::str_trim(x))
+    x <- stringr::str_replace_all(x, "\\.", "")
+    stringr::str_sub(x, 1, 3)
+  }
+  
+  life_groups <- list(
+    obesity_overweight = c("E66", "E65", "E67", "E68", "R63", "Z68"),
+    dyslipidemia_metabolic = c("E78", "E79", "E88"),
+    diabetes_glucose = c("E10", "E11", "E12", "E13", "E14", "E09", "R73", "E08"),
+    hypertension = c("I10", "I11", "I12", "I13", "I15", "I16", "I27"),
+    tobacco_related = c("F17", "Z72", "Z87", "J44", "J43", "J41", "J42", "J47", "J40", "J98"),
+    alcohol_related = c("F10", "K70", "K29", "G31", "G62", "G72", "I42", "K86", "E24", "E52", "T51", "Y90", "Y91"),
+    substance_use = c("F11", "F12", "F13", "F14", "F15", "F16", "F18", "F19", "F55"),
+    nutritional_problems = c("E40", "E41", "E42", "E43", "E44", "E45", "E46", "E50", "E51", "E52", "E53", 
+                            "E54", "E55", "E56", "E58", "E59", "E60", "E61", "E63", "E64", 
+                            "D50", "D51", "D52", "D53"),
+    liver_disease_nonalcoholic = c("K76", "K72", "K73", "K74", "K75", "K77"),
+    sleep_disorders = c("G47", "F51", "G25"),
+    cardiovascular_lifestyle = c("I20", "I21", "I22", "I23", "I24", "I25", "I50", "I51", 
+                                "I64", "I65", "I66", "I67", "I70", "I73", "I77", "I78"),
+    gastrointestinal_lifestyle = c("K21", "K22", "K25", "K26", "K27", "K28", "K29", "K30", 
+                                   "K31", "K58", "K59", "K90", "K91", "K92"),
+    musculoskeletal_sedentary = c("M79", "M81", "M80", "M85", "M62", "M25", "M54"),
+    mental_health_lifestyle = c("F32", "F33", "F34", "F41", "F43", "F48", "F50", "F54")
+  )
+  
+  # Create normalized ICD-10 columns
+  comorb_cols <- paste0("DIAGNOSTICO", 2:35)
+  comorb_cols <- intersect(comorb_cols, names(data_cancer))
+  
+  for(col in comorb_cols){
+    data_cancer[[paste0(col, "_C3")]] <- icd3_norm(data_cancer[[col]])
+  }
+  
+  # Create comorbidity dummy variables
+  c3_cols <- paste0(comorb_cols, "_C3")
+  has_comorbidity <- function(row_codes, target_codes){
+    any(row_codes %in% target_codes, na.rm = TRUE)
+  }
+  
+  for(group_name in names(life_groups)){
+    target_codes <- life_groups[[group_name]]
+    data_cancer[[group_name]] <- apply(
+      data_cancer[, c3_cols], 
+      1, 
+      function(x) as.integer(has_comorbidity(x, target_codes))
+    )
+  }
+  
+  # Summary variables
+  dummy_vars <- names(life_groups)
+  data_cancer$n_lifestyle_comorb <- rowSums(data_cancer[, dummy_vars], na.rm = TRUE)
+  
+  # Clean up intermediate columns
+  data_cancer <- data_cancer |>
+    dplyr::select(-ends_with("_C3"))
+  
+  # Add estado_alta variable
+  data_cancer <- data_cancer |>
+    mutate(
+      estado_alta = case_when(
+        TIPOALTA == "FALLECIDO" ~ "Deceased",
+        TIPOALTA %in% c("DOMICILIO", "ALTA VOLUNTARIA", "HOSPITALIZACIÓN DOMICILIARIA",
+                        "DERIVACIÓN OTRO HOSPITAL DEL SERVICIO", 
+                        "DERIVACIÓN OTRO HOSPITAL DE LA RED NACIONAL",
+                        "DERIVACIÓN INST. PRIVADA (COMPRA DE SERVICIOS",
+                        "DERIVACIÓN INST. PRIVADA (VOLUNTARIO)",
+                        "DERIVACIÓN A OTROS CENTROS (CÁRCEL, HOGAR DE") ~ "Discharged",
+        TRUE ~ "Other"
+      )
+    )
+  
+  # ==========================
+  # Save processed data
+  # ==========================
+  saveRDS(data_cancer, output_file)
+}
+```
+
+
+```{r}
+# ==========================
+# Function to create comorbidity prevalence table
+# ==========================
+create_comorbidity_table <- function(data, group_var = "cancer_site") {
+  data |>
+    group_by(!!sym(group_var)) |>
+    summarise(
+      N = n(),
+      `Obesity and Overweight` = round(mean(obesity_overweight) * 100, 1),
+      `Dyslipidemia and Metabolic Disorders` = round(mean(dyslipidemia_metabolic) * 100, 1),
+      `Diabetes and Glucose Disorders` = round(mean(diabetes_glucose) * 100, 1),
+      `Hypertension` = round(mean(hypertension) * 100, 1),
+      `Tobacco Related Diseases` = round(mean(tobacco_related) * 100, 1),
+      `Alcohol Related Diseases` = round(mean(alcohol_related) * 100, 1),
+      `Other Substance Use` = round(mean(substance_use) * 100, 1),
+      `Nutritional Deficiencies` = round(mean(nutritional_problems) * 100, 1),
+      `Non Alcoholic Liver Disease` = round(mean(liver_disease_nonalcoholic) * 100, 1),
+      `Sleep Disorders` = round(mean(sleep_disorders) * 100, 1),
+      `Cardiovascular Diseases` = round(mean(cardiovascular_lifestyle) * 100, 1),
+      `Gastrointestinal Problems` = round(mean(gastrointestinal_lifestyle) * 100, 1),
+      `Musculoskeletal Disorders` = round(mean(musculoskeletal_sedentary) * 100, 1),
+      `Mental Health Problems` = round(mean(mental_health_lifestyle) * 100, 1),
+      `Any Lifestyle Comorbidity (%)` = round(mean(n_lifestyle_comorb > 0) * 100, 1),
+      `Mean Number of Comorbidities` = round(mean(n_lifestyle_comorb), 2),
+      .groups = "drop"
+    ) |>
+    arrange(desc(N))
+}
+
+# ==========================
+# Function to create heatmap
+# ==========================
+create_heatmap <- function(table_data, title, subtitle = NULL, viridis_option = "D") {
+  heatmap_data <- table_data |>
+    dplyr::select(-contains("Patients"), -contains("Comorbidity"), -contains("Number")) |>
+    column_to_rownames("Cancer Site") |>
+    as.matrix()
+  
+  heatmap_long <- melt(heatmap_data)
+  names(heatmap_long) <- c("Cancer Site", "Comorbidity", "Prevalence")
+  
+  ggplot(heatmap_long, aes(x = Comorbidity, y = `Cancer Site`, fill = Prevalence)) +
+    geom_tile(color = "white", size = 0.5) +
+    scale_fill_viridis(name = "Prevalence (%)", 
+                       option = viridis_option,
+                       limits = c(0, max(heatmap_long$Prevalence))) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 40, hjust = 1, size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = 11, hjust = 0.5),
+          legend.position = "right") +
+    labs(title = title, subtitle = subtitle, x = "", y = "") +
+    geom_text(aes(label = sprintf("%.1f", Prevalence)), 
+              color = "white", size = 3)
+}
+
+# ==========================
+# Create all tables
+# ==========================
+
+# Table 0: Diagnostic position analysis
+diagnostic_position_table <- data_cancer |>
+  mutate(position_group = case_when(
+    diagnostic_position == 1 ~ "Primary Diagnosis",
+    diagnostic_position %in% 2:5 ~ "Secondary Diagnoses (2-5)",
+    diagnostic_position %in% 6:10 ~ "Later Diagnoses (6-10)",
+    TRUE ~ "Very Late Diagnoses (11+)"
+  )) |>
+  group_by(position_group) |>
+  summarise(
+    `Total Cases` = n(),
+    `Percentage` = round(n() / nrow(data_cancer) * 100, 1),
+    `Mean Age` = round(mean(EDAD, na.rm = TRUE), 1),
+    `Female (%)` = round(mean(SEXO == "MUJER", na.rm = TRUE) * 100, 1),
+    `Mortality Rate (%)` = round(mean(estado_alta == "Deceased") * 100, 1),
+    `Mean LOS` = round(mean(length_of_stay, na.rm = TRUE), 1),
+    `Any Comorbidity (%)` = round(mean(n_lifestyle_comorb > 0) * 100, 1),
+    `Mean Comorbidities` = round(mean(n_lifestyle_comorb), 2)
+  )
+
+# Table 1: Patient Distribution
+tabla_distribucion <- data_cancer |>
+  group_by(cancer_site) |>
+  summarise(
+    `Total Patients` = n(),
+    `Discharged Alive` = sum(estado_alta == "Discharged"),
+    `Deceased` = sum(estado_alta == "Deceased"),
+    `Other Status` = sum(estado_alta == "Other"),
+    `Mortality Rate (%)` = round(sum(estado_alta == "Deceased") / n() * 100, 1),
+    `Mean Age (years)` = round(mean(EDAD, na.rm = TRUE), 1),
+    `Age Range` = paste(min(EDAD, na.rm = TRUE), "-", max(EDAD, na.rm = TRUE)),
+    `Female (%)` = round(mean(SEXO == "MUJER", na.rm = TRUE) * 100, 1),
+    `Mean LOS (days)` = round(mean(length_of_stay, na.rm = TRUE), 1),
+    `Median LOS (days)` = round(median(length_of_stay, na.rm = TRUE), 1),
+    `LOS Range` = paste(min(length_of_stay, na.rm = TRUE), "-", max(length_of_stay, na.rm = TRUE)),
+    `SD LOS` = round(sd(length_of_stay, na.rm = TRUE), 1)
+  ) |>
+  arrange(desc(`Total Patients`)) |>
+  rename(`Cancer Site` = cancer_site)
+
+# Table 2: Trends by Year
+tabla_year <- data_cancer |>
+  group_by(year, cancer_site) |>
+  summarise(
+    `Total Patients` = n(),
+    `Mortality Rate (%)` = round(sum(estado_alta == "Deceased") / n() * 100, 1),
+    `Mean Age` = round(mean(EDAD, na.rm = TRUE), 1),
+    `Mean LOS` = round(mean(length_of_stay, na.rm = TRUE), 1),
+    `Any Comorbidity (%)` = round(mean(n_lifestyle_comorb > 0) * 100, 1),
+    .groups = "drop"
+  ) |>
+  rename(`Year` = year, `Cancer Site` = cancer_site)
+
+# Tables 3-5: Comorbidity tables
+tabla_total <- create_comorbidity_table(data_cancer) |>
+  rename(`Cancer Site` = cancer_site, `Total Patients` = N)
+
+tabla_alta <- create_comorbidity_table(
+  filter(data_cancer, estado_alta == "Discharged")
+) |>
+  rename(`Cancer Site` = cancer_site, `Discharged Patients` = N)
+
+tabla_fallecidos <- create_comorbidity_table(
+  filter(data_cancer, estado_alta == "Deceased")
+) |>
+  rename(`Cancer Site` = cancer_site, `Deceased Patients` = N)
+
+# Table 6: Summary by discharge status
+summary_stats <- data_cancer |>
+  filter(estado_alta %in% c("Discharged", "Deceased")) |>
+  group_by(`Discharge Status` = estado_alta) |>
+  summarise(
+    `Total Patients` = n(),
+    `Mean Age` = round(mean(EDAD, na.rm = TRUE), 1),
+    `Female (%)` = round(mean(SEXO == "MUJER", na.rm = TRUE) * 100, 1),
+    `Mean LOS (days)` = round(mean(length_of_stay, na.rm = TRUE), 1),
+    `Median LOS (days)` = round(median(length_of_stay, na.rm = TRUE), 1),
+    `SD LOS` = round(sd(length_of_stay, na.rm = TRUE), 1),
+    `Any Lifestyle Comorbidity (%)` = round(mean(n_lifestyle_comorb > 0) * 100, 1),
+    `Mean Comorbidities` = round(mean(n_lifestyle_comorb), 2),
+    `Patients with 3+ Comorbidities (%)` = round(mean(n_lifestyle_comorb >= 3) * 100, 1)
+  )
+
+# Table 7: LOS analysis
+los_analysis <- data_cancer |>
+  filter(estado_alta %in% c("Discharged", "Deceased")) |>
+  group_by(`Cancer Site` = cancer_site, `Discharge Status` = estado_alta) |>
+  summarise(
+    `N` = n(),
+    `Mean LOS` = round(mean(length_of_stay, na.rm = TRUE), 1),
+    `Median LOS` = round(median(length_of_stay, na.rm = TRUE), 1),
+    `IQR` = paste(round(quantile(length_of_stay, 0.25, na.rm = TRUE), 0), 
+                  "-", 
+                  round(quantile(length_of_stay, 0.75, na.rm = TRUE), 0)),
+    .groups = "drop"
+  )
+
+# Table 8: Yearly trends
+yearly_trends <- data_cancer |>
+  group_by(year) |>
+  summarise(
+    `Total Cases` = n(),
+    `Stomach` = sum(cancer_site == "Stomach"),
+    `Colorectal` = sum(cancer_site == "Colorectal"),
+    `Pancreas` = sum(cancer_site == "Pancreas"),
+    `Gallbladder` = sum(cancer_site == "Gallbladder"),
+    `Mortality Rate (%)` = round(mean(estado_alta == "Deceased") * 100, 1),
+    `Mean Age` = round(mean(EDAD, na.rm = TRUE), 1),
+    `Mean LOS` = round(mean(length_of_stay, na.rm = TRUE), 1),
+    `Any Comorbidity (%)` = round(mean(n_lifestyle_comorb > 0) * 100, 1),
+    .groups = "drop"
+  ) |>
+  rename(`Year` = year)
+
+# Table 9: Mean LOS by cancer site and comorbidities
+los_comorbidity_table <- data_cancer |>
+  group_by(cancer_site) |>
+  summarise(
+    `Obesity and Overweight` = round(mean(length_of_stay[obesity_overweight == 1], na.rm = TRUE), 1),
+    `Dyslipidemia and Metabolic` = round(mean(length_of_stay[dyslipidemia_metabolic == 1], na.rm = TRUE), 1),
+    `Diabetes and Glucose` = round(mean(length_of_stay[diabetes_glucose == 1], na.rm = TRUE), 1),
+    `Hypertension` = round(mean(length_of_stay[hypertension == 1], na.rm = TRUE), 1),
+    `Tobacco Related` = round(mean(length_of_stay[tobacco_related == 1], na.rm = TRUE), 1),
+    `Alcohol Related` = round(mean(length_of_stay[alcohol_related == 1], na.rm = TRUE), 1),
+    `Other Substance Use` = round(mean(length_of_stay[substance_use == 1], na.rm = TRUE), 1),
+    `Nutritional Deficiencies` = round(mean(length_of_stay[nutritional_problems == 1], na.rm = TRUE), 1),
+    `Non Alcoholic Liver` = round(mean(length_of_stay[liver_disease_nonalcoholic == 1], na.rm = TRUE), 1),
+    `Sleep Disorders` = round(mean(length_of_stay[sleep_disorders == 1], na.rm = TRUE), 1),
+    `Cardiovascular` = round(mean(length_of_stay[cardiovascular_lifestyle == 1], na.rm = TRUE), 1),
+    `Gastrointestinal` = round(mean(length_of_stay[gastrointestinal_lifestyle == 1], na.rm = TRUE), 1),
+    `Musculoskeletal` = round(mean(length_of_stay[musculoskeletal_sedentary == 1], na.rm = TRUE), 1),
+    `Mental Health` = round(mean(length_of_stay[mental_health_lifestyle == 1], na.rm = TRUE), 1),
+    .groups = "drop"
+  ) |>
+  rename(`Cancer Site` = cancer_site)
+
+# Table 10: LOS difference table
+los_diff_table <- data_cancer |>
+  group_by(cancer_site) |>
+  summarise(
+    `Obesity` = round(mean(length_of_stay[obesity_overweight == 1], na.rm = TRUE) - 
+                     mean(length_of_stay[obesity_overweight == 0], na.rm = TRUE), 1),
+    `Dyslipidemia` = round(mean(length_of_stay[dyslipidemia_metabolic == 1], na.rm = TRUE) - 
+                          mean(length_of_stay[dyslipidemia_metabolic == 0], na.rm = TRUE), 1),
+    `Diabetes` = round(mean(length_of_stay[diabetes_glucose == 1], na.rm = TRUE) - 
+                      mean(length_of_stay[diabetes_glucose == 0], na.rm = TRUE), 1),
+    `Hypertension` = round(mean(length_of_stay[hypertension == 1], na.rm = TRUE) - 
+                          mean(length_of_stay[hypertension == 0], na.rm = TRUE), 1),
+    `Tobacco` = round(mean(length_of_stay[tobacco_related == 1], na.rm = TRUE) - 
+                     mean(length_of_stay[tobacco_related == 0], na.rm = TRUE), 1),
+    `Alcohol` = round(mean(length_of_stay[alcohol_related == 1], na.rm = TRUE) - 
+                     mean(length_of_stay[alcohol_related == 0], na.rm = TRUE), 1),
+    `Substance Use` = round(mean(length_of_stay[substance_use == 1], na.rm = TRUE) - 
+                           mean(length_of_stay[substance_use == 0], na.rm = TRUE), 1),
+    `Nutritional` = round(mean(length_of_stay[nutritional_problems == 1], na.rm = TRUE) - 
+                         mean(length_of_stay[nutritional_problems == 0], na.rm = TRUE), 1),
+    `Liver Disease` = round(mean(length_of_stay[liver_disease_nonalcoholic == 1], na.rm = TRUE) - 
+                           mean(length_of_stay[liver_disease_nonalcoholic == 0], na.rm = TRUE), 1),
+    `Sleep` = round(mean(length_of_stay[sleep_disorders == 1], na.rm = TRUE) - 
+                   mean(length_of_stay[sleep_disorders == 0], na.rm = TRUE), 1),
+    `Cardiovascular` = round(mean(length_of_stay[cardiovascular_lifestyle == 1], na.rm = TRUE) - 
+                            mean(length_of_stay[cardiovascular_lifestyle == 0], na.rm = TRUE), 1),
+    `Gastrointestinal` = round(mean(length_of_stay[gastrointestinal_lifestyle == 1], na.rm = TRUE) - 
+                               mean(length_of_stay[gastrointestinal_lifestyle == 0], na.rm = TRUE), 1),
+    `Musculoskeletal` = round(mean(length_of_stay[musculoskeletal_sedentary == 1], na.rm = TRUE) - 
+                              mean(length_of_stay[musculoskeletal_sedentary == 0], na.rm = TRUE), 1),
+    `Mental Health` = round(mean(length_of_stay[mental_health_lifestyle == 1], na.rm = TRUE) - 
+                           mean(length_of_stay[mental_health_lifestyle == 0], na.rm = TRUE), 1),
+    .groups = "drop"
+  ) |>
+  rename(`Cancer Site` = cancer_site)
+
+# ==========================
+# Display all tables with kable
+# ==========================
+
+# Table 0
+diagnostic_position_table |>
+  kable(format = "html", 
+        caption = "Table 0: Patient Characteristics by Cancer Diagnostic Position",
+        align = c('l', rep('c', ncol(diagnostic_position_table)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#9b59b6") |>
+  column_spec(1, bold = TRUE)
+
+# Table 1
+tabla_distribucion |>
+  kable(format = "html", 
+        caption = "Table 1: Patient Distribution by Cancer Site and Demographics (All Years: 2019-2023)",
+        align = c('l', rep('c', ncol(tabla_distribucion)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#2c3e50") |>
+  column_spec(1, bold = TRUE)
+
+# Table 2
+tabla_year |>
+  kable(format = "html", 
+        caption = "Table 2: Trends by Year and Cancer Site",
+        align = c('l', rep('c', ncol(tabla_year)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#8e44ad") |>
+  column_spec(1, bold = TRUE)
+
+# Table 3
+tabla_total |>
+  dplyr::select(-`Any Lifestyle Comorbidity (%)`, -`Mean Number of Comorbidities`) |>
+  kable(format = "html", 
+        caption = "Table 3: Prevalence (%) of Lifestyle-Related Comorbidities - All Patients (2019-2023)",
+        align = c('l', rep('c', ncol(tabla_total)-3))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#34495e") |>
+  column_spec(1, bold = TRUE)
+
+# Table 4
+tabla_alta |>
+  dplyr::select(-`Any Lifestyle Comorbidity (%)`, -`Mean Number of Comorbidities`) |>
+  kable(format = "html", 
+        caption = "Table 4: Prevalence (%) of Lifestyle-Related Comorbidities - Discharged Patients",
+        align = c('l', rep('c', ncol(tabla_alta)-3))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#27ae60") |>
+  column_spec(1, bold = TRUE)
+
+# Table 5
+tabla_fallecidos |>
+  dplyr::select(-`Any Lifestyle Comorbidity (%)`, -`Mean Number of Comorbidities`) |>
+  kable(format = "html", 
+        caption = "Table 5: Prevalence (%) of Lifestyle-Related Comorbidities - Deceased Patients",
+        align = c('l', rep('c', ncol(tabla_fallecidos)-3))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#c0392b") |>
+  column_spec(1, bold = TRUE)
+
+# Table 6
+summary_stats |>
+  kable(format = "html", 
+        caption = "Table 6: Summary Statistics by Discharge Status (All Years: 2019-2023)",
+        align = c('l', rep('c', ncol(summary_stats)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#34495e") |>
+  column_spec(1, bold = TRUE)
+
+# Table 7
+los_analysis |>
+  kable(format = "html", 
+        caption = "Table 7: Length of Stay Analysis by Cancer Site and Discharge Status",
+        align = c('l', rep('c', ncol(los_analysis)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#2c3e50") |>
+  column_spec(1, bold = TRUE)
+
+# Table 8
+yearly_trends |>
+  kable(format = "html", 
+        caption = "Table 8: Yearly Trends in Cancer Cases and Outcomes (2019-2023)",
+        align = c('l', rep('c', ncol(yearly_trends)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 11) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#e67e22") |>
+  column_spec(1, bold = TRUE)
+
+# Table 9: Mean LOS by Cancer Site and Comorbidities
+los_comorbidity_table |>
+  kable(format = "html", 
+        caption = "Table 9: Mean Length of Stay (days) by Cancer Site and Comorbidity",
+        align = c('l', rep('c', ncol(los_comorbidity_table)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 10) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#16a085") |>
+  column_spec(1, bold = TRUE)
+
+# Table 10: LOS Difference by Comorbidity Presence
+los_diff_table |>
+  kable(format = "html", 
+        caption = "Table 10: Impact of Comorbidities on Length of Stay (Days difference: WITH - WITHOUT comorbidity)",
+        align = c('l', rep('c', ncol(los_diff_table)-1))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 10) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#8b4513") |>
+  column_spec(1, bold = TRUE)
+
+# ==========================
+# Create visualizations
+# ==========================
+
+# Heatmaps
+p1 <- create_heatmap(tabla_total, 
+                     "Heatmap: Lifestyle Comorbidities in All Cancer Patients", 
+                     viridis_option = "D")
+
+p2 <- create_heatmap(tabla_alta, 
+                     "Heatmap: Lifestyle Comorbidities in Discharged Cancer Patients", 
+                     viridis_option = "C")
+
+p3 <- create_heatmap(tabla_fallecidos, 
+                     "Heatmap: Lifestyle Comorbidities in Deceased Cancer Patients", 
+                     viridis_option = "C")
+
+print(p1)
+print(p2)
+print(p3)
+
+# Create heatmap for LOS difference
+los_diff_data <- los_diff_table |>
+  column_to_rownames("Cancer Site") |>
+  as.matrix()
+
+los_diff_data[is.nan(los_diff_data)] <- NA
+
+los_diff_long <- melt(los_diff_data, na.rm = TRUE)
+names(los_diff_long) <- c("Cancer Site", "Comorbidity", "LOS_Difference")
+
+p_los_diff_heatmap <- ggplot(los_diff_long, aes(x = Comorbidity, y = `Cancer Site`, fill = LOS_Difference)) +
+  geom_tile(color = "white", size = 0.5) +
+  scale_fill_gradient2(name = "LOS Difference\n(days)", 
+                       low = "#3498db", mid = "white", high = "#e74c3c",
+                       midpoint = 0,
+                       na.value = "grey90") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+        axis.text.y = element_text(size = 10),
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 11, hjust = 0.5),
+        legend.position = "right") +
+  labs(title = "Impact of Comorbidities on Length of Stay",
+       subtitle = "Difference in mean LOS: patients WITH comorbidity - WITHOUT comorbidity (red = longer stay)",
+       x = "", y = "") +
+  geom_text(aes(label = sprintf("%+.1f", LOS_Difference)), 
+            color = "black", size = 2.5)
+
+print(p_los_diff_heatmap)
+
+# Create heatmap for mean LOS by cancer and comorbidities
+los_heatmap_data <- los_comorbidity_table |>
+  column_to_rownames("Cancer Site") |>
+  as.matrix()
+
+los_heatmap_data[is.nan(los_heatmap_data)] <- NA
+
+los_heatmap_long <- melt(los_heatmap_data, na.rm = TRUE)
+names(los_heatmap_long) <- c("Cancer Site", "Comorbidity", "Mean_LOS")
+
+p_los_heatmap <- ggplot(los_heatmap_long, aes(x = Comorbidity, y = `Cancer Site`, fill = Mean_LOS)) +
+  geom_tile(color = "white", size = 0.5) +
+  scale_fill_viridis(name = "Mean LOS\n(days)", 
+                     option = "A",
+                     na.value = "grey90") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+        axis.text.y = element_text(size = 10),
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 11, hjust = 0.5),
+        legend.position = "right") +
+  labs(title = "Mean Length of Stay by Cancer Site and Comorbidity",
+       subtitle = "Days of hospitalization for patients with each comorbidity",
+       x = "", y = "") +
+  geom_text(aes(label = sprintf("%.1f", Mean_LOS)), 
+            color = "white", size = 2.5)
+
+print(p_los_heatmap)
+
+# Comparative heatmap
+if(nrow(tabla_fallecidos) == nrow(tabla_alta)) {
+  heatmap_deceased <- tabla_fallecidos |>
+    dplyr::select(-contains("Patients"), -contains("Comorbidity"), -contains("Number")) |>
+    column_to_rownames("Cancer Site") |>
+    as.matrix()
+  
+  heatmap_discharged <- tabla_alta |>
+    dplyr::select(-contains("Patients"), -contains("Comorbidity"), -contains("Number")) |>
+    column_to_rownames("Cancer Site") |>
+    as.matrix()
+  
+  heatmap_diff <- heatmap_deceased - heatmap_discharged
+  heatmap_diff_long <- melt(heatmap_diff)
+  names(heatmap_diff_long) <- c("Cancer Site", "Comorbidity", "Difference")
+  
+  p4 <- ggplot(heatmap_diff_long, aes(x = Comorbidity, y = `Cancer Site`, fill = Difference)) +
+    geom_tile(color = "white", size = 0.5) +
+    scale_fill_gradient2(name = "Difference (%)\n(Deceased - Discharged)",
+                        low = "#2ecc71", mid = "white", high = "#e74c3c",
+                        midpoint = 0) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = 11, hjust = 0.5),
+          legend.position = "right") +
+    labs(title = "Difference in Comorbidity Prevalence: Deceased vs Discharged",
+         subtitle = "Red: higher in deceased | Green: higher in discharged",
+         x = "", y = "") +
+    geom_text(aes(label = sprintf("%+.1f", Difference)), 
+              color = "black", size = 3)
+  
+  print(p4)
+}
+
+# Trend plots
+trend_plot <- data_cancer |>
+  group_by(year, cancer_site) |>
+  summarise(
+    count = n(),
+    mortality_rate = mean(estado_alta == "Deceased") * 100,
+    .groups = "drop"
+  )
+
+p_trend <- ggplot(trend_plot, aes(x = year, y = count, color = cancer_site)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  scale_color_viridis_d(option = "D") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +
+  labs(title = "Cancer Cases Trend by Site (2019-2023)",
+       x = "Year",
+       y = "Number of Cases",
+       color = "Cancer Site")
+
+print(p_trend)
+
+p_mortality <- ggplot(trend_plot, aes(x = year, y = mortality_rate, color = cancer_site)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  scale_color_viridis_d(option = "D") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +
+  labs(title = "Mortality Rate Trend by Cancer Site (2019-2023)",
+       x = "Year",
+       y = "Mortality Rate (%)",
+       color = "Cancer Site")
+
+print(p_mortality)
+```
+
+# Models
+
+```{r}
+# ==========================
+# Prepare data for modeling with all variables
+# ==========================
+
+# Create binary outcome variable for mortality
+data_cancer <- data_cancer |>
+  mutate(
+    egresar_fallecido = ifelse(estado_alta == "Deceased", 1, 0),
+    # Set year as factor with 2019 as reference
+    year_factor = factor(year, levels = c(2019, 2020, 2021, 2022, 2023)),
+    # Ensure severity and mortality risk are ordered factors
+    IR_29301_SEVERIDAD = factor(IR_29301_SEVERIDAD, levels = c("Low", "Medium", "High")),
+    IR_29301_MORTALIDAD = factor(IR_29301_MORTALIDAD, levels = c("Low risk", "Medium risk", "High risk"))
+  )
+
+# Define all comorbidity variables
+comorbidity_vars <- c("obesity_overweight", "dyslipidemia_metabolic", "diabetes_glucose",
+                      "hypertension", "tobacco_related", "alcohol_related",
+                      "substance_use", "nutritional_problems", "liver_disease_nonalcoholic",
+                      "sleep_disorders", "cardiovascular_lifestyle", "gastrointestinal_lifestyle",
+                      "musculoskeletal_sedentary", "mental_health_lifestyle")
+
+# Create dataset for each cancer type
+cancer_types <- unique(data_cancer$cancer_site)
+datasets <- list()
+
+for(cancer in cancer_types) {
+  datasets[[cancer]] <- data_cancer |>
+    filter(cancer_site == cancer) |>
+    # Remove missing values for modeling
+    filter(complete.cases(EDAD, SEXO, service_category, year_factor, length_of_stay,
+                         IR_29301_SEVERIDAD, IR_29301_MORTALIDAD))
+}
+
+# ==========================
+# Model 1: Mixed Logistic Regression for Mortality
+# ==========================
+
+logistic_models <- list()
+logistic_results <- list()
+logistic_performance <- list()
+
+# Build formula with all comorbidities
+logistic_formula <- as.formula(paste(
+  "egresar_fallecido ~ EDAD + SEXO + service_category + year_factor +",
+  "IR_29301_SEVERIDAD + IR_29301_MORTALIDAD +",
+  paste(comorbidity_vars, collapse = " + "),
+  "+ (1|year_factor)"
+))
+
+for(cancer in cancer_types) {
+  tryCatch({
+    model <- glmer(
+      logistic_formula,
+      data = datasets[[cancer]],
+      family = binomial(link = "logit"),
+      control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+    )
+    
+    logistic_models[[cancer]] <- model
+    
+    # Extract results
+    fixed_effects <- summary(model)$coefficients
+    
+    # Create results table with proper formatting
+    results_df <- data.frame(
+      Variable = rownames(fixed_effects),
+      Coefficient = fixed_effects[, "Estimate"],
+      SE = fixed_effects[, "Std. Error"],
+      OR = exp(fixed_effects[, "Estimate"]),
+      CI_Lower = exp(fixed_effects[, "Estimate"] - 1.96 * fixed_effects[, "Std. Error"]),
+      CI_Upper = exp(fixed_effects[, "Estimate"] + 1.96 * fixed_effects[, "Std. Error"]),
+      z_value = fixed_effects[, "z value"],
+      P_Value = fixed_effects[, "Pr(>|z|)"]
+    )
+    
+    logistic_results[[cancer]] <- results_df
+    
+    # Calculate performance metrics
+    pred_probs <- predict(model, type = "response", re.form = NA)
+    observed <- datasets[[cancer]]$egresar_fallecido
+    
+    # ROC and AUC
+    roc_obj <- roc(observed, pred_probs, quiet = TRUE)
+    auc_val <- as.numeric(auc(roc_obj))
+    
+    # Pseudo R-squared measures
+    null_model <- glm(egresar_fallecido ~ 1, data = datasets[[cancer]], family = binomial)
+    ll_full <- as.numeric(logLik(model))
+    ll_null <- as.numeric(logLik(null_model))
+    n <- nobs(model)
+    
+    mcfadden <- 1 - (ll_full / ll_null)
+    cox_snell <- 1 - exp((2/n) * (ll_null - ll_full))
+    nagelkerke <- cox_snell / (1 - exp(2 * ll_null / n))
+    
+    logistic_performance[[cancer]] <- data.frame(
+      Cancer = cancer,
+      N = n,
+      Events = sum(observed),
+      EventRate = mean(observed) * 100,
+      AIC = AIC(model),
+      BIC = BIC(model),
+      LogLik = ll_full,
+      AUC = auc_val,
+      McFadden = mcfadden,
+      CoxSnell = cox_snell,
+      Nagelkerke = nagelkerke
+    )
+    
+  }, error = function(e) {
+    message(paste("Logistic model failed for", cancer, ":", e$message))
+  })
+}
+
+# ==========================
+# Model 2: Negative Binomial Mixed Model for Length of Stay
+# ==========================
+
+nb_models <- list()
+nb_results <- list()
+nb_performance <- list()
+
+# Build negative binomial formula
+nb_formula <- as.formula(paste(
+  "length_of_stay ~ EDAD + SEXO + service_category + year_factor +",
+  "IR_29301_SEVERIDAD + IR_29301_MORTALIDAD +",
+  paste(comorbidity_vars, collapse = " + "),
+  "+ (1|year_factor)"
+))
+
+for(cancer in cancer_types) {
+  tryCatch({
+    model <- glmmTMB(
+      nb_formula,
+      data = datasets[[cancer]],
+      family = nbinom2,
+      control = glmmTMBControl(optimizer = nlminb, optCtrl = list(eval.max = 1000, iter.max = 1000))
+    )
+    
+    nb_models[[cancer]] <- model
+    
+    # Extract results
+    fixed_effects <- summary(model)$coefficients$cond
+    
+    # Create results table with proper formatting
+    results_df <- data.frame(
+      Variable = rownames(fixed_effects),
+      Coefficient = fixed_effects[, "Estimate"],
+      SE = fixed_effects[, "Std. Error"],
+      IRR = exp(fixed_effects[, "Estimate"]),
+      CI_Lower = exp(fixed_effects[, "Estimate"] - 1.96 * fixed_effects[, "Std. Error"]),
+      CI_Upper = exp(fixed_effects[, "Estimate"] + 1.96 * fixed_effects[, "Std. Error"]),
+      z_value = fixed_effects[, "z value"],
+      P_Value = fixed_effects[, "Pr(>|z|)"]
+    )
+    
+    nb_results[[cancer]] <- results_df
+    
+    # Calculate performance metrics
+    fitted_vals <- fitted(model)
+    observed_vals <- datasets[[cancer]]$length_of_stay
+    residuals <- observed_vals - fitted_vals
+    
+    # Pseudo R-squared for count models
+    null_model <- glm(length_of_stay ~ 1, data = datasets[[cancer]], family = poisson)
+    ll_full <- as.numeric(logLik(model))
+    ll_null <- as.numeric(logLik(null_model))
+    n <- nobs(model)
+    
+    mcfadden <- 1 - (ll_full / ll_null)
+    
+    # Additional metrics
+    rmse <- sqrt(mean(residuals^2))
+    mae <- mean(abs(residuals))
+    
+    nb_performance[[cancer]] <- data.frame(
+      Cancer = cancer,
+      N = n,
+      MeanLOS = mean(observed_vals),
+      SDLOS = sd(observed_vals),
+      AIC = AIC(model),
+      BIC = BIC(model),
+      LogLik = ll_full,
+      RMSE = rmse,
+      MAE = mae,
+      McFadden = mcfadden
+    )
+    
+  }, error = function(e) {
+    message(paste("Negative binomial model failed for", cancer, ":", e$message))
+  })
+}
+
+# ==========================
+# Create Consolidated Tables for All Cancer Types
+# ==========================
+
+# Function to format effect sizes with CI and significance
+format_effect <- function(estimate, ci_lower, ci_upper, p_value) {
+  stars <- ifelse(p_value < 0.001, "***",
+                 ifelse(p_value < 0.01, "**",
+                       ifelse(p_value < 0.05, "*", "")))
+  sprintf("%.3f [%.3f, %.3f]%s", estimate, ci_lower, ci_upper, stars)
+}
+
+# Function to clean variable names
+clean_var_names <- function(var_names) {
+  var_names <- gsub("\\(Intercept\\)", "Intercept", var_names)
+  var_names <- gsub("SEXOMUJER", "Sex Female", var_names)
+  var_names <- gsub("EDAD", "Age", var_names)
+  var_names <- gsub("service_categoryICU", "Service ICU", var_names)
+  var_names <- gsub("service_categoryITU", "Service ITU", var_names)
+  var_names <- gsub("service_categoryMS", "Service MS", var_names)
+  var_names <- gsub("service_categoryOthers", "Service Others", var_names)
+  var_names <- gsub("year_factor", "Year ", var_names)
+  var_names <- gsub("IR_29301_SEVERIDADMedium", "Severity Medium", var_names)
+  var_names <- gsub("IR_29301_SEVERIDADHigh", "Severity High", var_names)
+  var_names <- gsub("IR_29301_MORTALIDADMedium risk", "Mortality Risk Medium", var_names)
+  var_names <- gsub("IR_29301_MORTALIDADHigh risk", "Mortality Risk High", var_names)
+  var_names <- gsub("obesity_overweight", "Obesity Overweight", var_names)
+  var_names <- gsub("dyslipidemia_metabolic", "Dyslipidemia", var_names)
+  var_names <- gsub("diabetes_glucose", "Diabetes", var_names)
+  var_names <- gsub("hypertension", "Hypertension", var_names)
+  var_names <- gsub("tobacco_related", "Tobacco Related", var_names)
+  var_names <- gsub("alcohol_related", "Alcohol Related", var_names)
+  var_names <- gsub("substance_use", "Substance Use", var_names)
+  var_names <- gsub("nutritional_problems", "Nutritional Problems", var_names)
+  var_names <- gsub("liver_disease_nonalcoholic", "Liver Disease", var_names)
+  var_names <- gsub("sleep_disorders", "Sleep Disorders", var_names)
+  var_names <- gsub("cardiovascular_lifestyle", "Cardiovascular", var_names)
+  var_names <- gsub("gastrointestinal_lifestyle", "Gastrointestinal", var_names)
+  var_names <- gsub("musculoskeletal_sedentary", "Musculoskeletal", var_names)
+  var_names <- gsub("mental_health_lifestyle", "Mental Health", var_names)
+  return(var_names)
+}
+
+# ==========================
+# Consolidated Logistic Regression Table
+# ==========================
+
+# Get all unique variables across all models
+all_vars <- unique(unlist(lapply(logistic_results, function(x) x$Variable)))
+all_vars <- all_vars[all_vars != "(Intercept)"] # Exclude intercept
+
+# Create consolidated table
+logistic_consolidated <- data.frame(Variable = clean_var_names(all_vars))
+
+# Add columns for each cancer type
+for(cancer in cancer_types) {
+  if(cancer %in% names(logistic_results)) {
+    df <- logistic_results[[cancer]]
+    df$Variable_clean <- clean_var_names(df$Variable)
+    
+    # Create formatted OR column
+    effects <- character(length(logistic_consolidated$Variable))
+    
+    for(i in 1:nrow(logistic_consolidated)) {
+      var <- logistic_consolidated$Variable[i]
+      idx <- which(df$Variable_clean == var)
+      
+      if(length(idx) > 0) {
+        effects[i] <- format_effect(df$OR[idx], df$CI_Lower[idx], 
+                                   df$CI_Upper[idx], df$P_Value[idx])
+      } else {
+        effects[i] <- "—"
+      }
+    }
+    
+    logistic_consolidated[[cancer]] <- effects
+  }
+}
+
+
+# ==========================
+# Consolidated Negative Binomial Table
+# ==========================
+
+# Get all unique variables for NB models
+all_vars_nb <- unique(unlist(lapply(nb_results, function(x) x$Variable)))
+all_vars_nb <- all_vars_nb[all_vars_nb != "(Intercept)"] # Exclude intercept
+
+# Create consolidated table
+nb_consolidated <- data.frame(Variable = clean_var_names(all_vars_nb))
+
+# Add columns for each cancer type
+for(cancer in cancer_types) {
+  if(cancer %in% names(nb_results)) {
+    df <- nb_results[[cancer]]
+    df$Variable_clean <- clean_var_names(df$Variable)
+    
+    # Create formatted IRR column
+    effects <- character(length(nb_consolidated$Variable))
+    
+    for(i in 1:nrow(nb_consolidated)) {
+      var <- nb_consolidated$Variable[i]
+      idx <- which(df$Variable_clean == var)
+      
+      if(length(idx) > 0) {
+        effects[i] <- format_effect(df$IRR[idx], df$CI_Lower[idx], 
+                                   df$CI_Upper[idx], df$P_Value[idx])
+      } else {
+        effects[i] <- "—"
+      }
+    }
+    
+    nb_consolidated[[cancer]] <- effects
+  }
+}
+
+# ==========================
+# Consolidated Logistic Regression Table
+# ==========================
+
+# Display consolidated logistic table
+kable(logistic_consolidated,
+      caption = "<b>Table 1. Logistic Regression Models: Odds Ratios for In-Hospital Mortality by Cancer Type</b>",
+      format = "html",
+      escape = FALSE,
+      row.names = FALSE,
+      align = c("l", rep("c", length(cancer_types)))) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    font_size = 10
+  ) |>
+  row_spec(0, bold = TRUE, background = "#2c3e50", color = "white") |>
+  footnote(general = c("Values shown as OR [95% CI]",
+                       "*** p < 0.001, ** p < 0.01, * p < 0.05",
+                       "Reference categories: Male sex, MS service, Year 2019, Low severity, Low mortality risk"),
+           footnote_as_chunk = FALSE)
+
+# ==========================
+# Consolidated Negative Binomial Table
+# ==========================
+
+# Display consolidated NB table
+kable(nb_consolidated,
+      caption = "<b>Table 2. Negative Binomial Models: Incidence Rate Ratios for Length of Stay by Cancer Type</b>",
+      format = "html",
+      escape = FALSE,
+      row.names = FALSE,
+      align = c("l", rep("c", length(cancer_types)))) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    font_size = 10
+  ) |>
+  row_spec(0, bold = TRUE, background = "#e74c3c", color = "white") |>
+  footnote(general = c("Values shown as IRR [95% CI]",
+                       "*** p < 0.001, ** p < 0.01, * p < 0.05",
+                       "Reference categories: Male sex, MS service, Year 2019, Low severity, Low mortality risk"),
+           footnote_as_chunk = FALSE)
+```
+
+
+```{r}
+
+# ==========================
+# Combined Performance Metrics Table
+# ==========================
+
+# Logistic models performance
+log_perf_summary <- data.frame()
+for(cancer in names(logistic_performance)) {
+  perf <- logistic_performance[[cancer]]
+  log_perf_summary <- rbind(log_perf_summary,
+    data.frame(
+      Cancer = cancer,
+      Model = "Logistic",
+      N = format(perf$N, big.mark = ","),
+      Events = sprintf("%d (%.1f%%)", perf$Events, perf$EventRate),
+      AIC = sprintf("%.1f", perf$AIC),
+      BIC = sprintf("%.1f", perf$BIC),
+      AUC = sprintf("%.3f", perf$AUC),
+      McFadden = sprintf("%.3f", perf$McFadden),
+      Nagelkerke = sprintf("%.3f", perf$Nagelkerke)
+    )
+  )
+}
+
+# NB models performance  
+nb_perf_summary <- data.frame()
+for(cancer in names(nb_performance)) {
+  perf <- nb_performance[[cancer]]
+  nb_perf_summary <- rbind(nb_perf_summary,
+    data.frame(
+      Cancer = cancer,
+      Model = "Neg Binomial",
+      N = format(perf$N, big.mark = ","),
+      MeanLOS = sprintf("%.1f (%.1f)", perf$MeanLOS, perf$SDLOS),
+      AIC = sprintf("%.1f", perf$AIC),
+      BIC = sprintf("%.1f", perf$BIC),
+      RMSE = sprintf("%.2f", perf$RMSE),
+      MAE = sprintf("%.2f", perf$MAE),
+      McFadden = sprintf("%.3f", perf$McFadden)
+    )
+  )
+}
+
+# Combine and display performance table
+kable(log_perf_summary,
+      caption = "<b>Table 3. Model Performance Metrics: Logistic Regression</b>",
+      format = "html",
+      escape = FALSE,
+      row.names = FALSE) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    font_size = 11
+  ) |>
+  row_spec(0, bold = TRUE, background = "#16a085", color = "white")
+
+kable(nb_perf_summary,
+      caption = "<b>Table 4. Model Performance Metrics: Negative Binomial</b>",
+      format = "html",
+      escape = FALSE,
+      row.names = FALSE,
+      col.names = c("Cancer", "Model", "N", "Mean LOS (SD)", "AIC", "BIC", "RMSE", "MAE", "McFadden R²")) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    font_size = 11
+  ) |>
+  row_spec(0, bold = TRUE, background = "#d35400", color = "white")
+
+```
+
+
+```{r}
+# ==========================
+# Forest Plots for All Coefficients
+# ==========================
+
+# Logistic regression forest plot
+all_logistic_data <- data.frame()
+
+for(cancer in names(logistic_results)) {
+  df <- logistic_results[[cancer]]
+  df$Cancer <- cancer
+  df$Variable <- clean_var_names(df$Variable)
+  # Exclude intercept for forest plot
+  df <- df[df$Variable != "Intercept", ]
+  all_logistic_data <- rbind(all_logistic_data, df)
+}
+
+# Create comprehensive forest plot for logistic models
+ggplot(all_logistic_data, 
+                            aes(x = OR, y = reorder(Variable, OR), color = Cancer)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50", alpha = 0.7) +
+  geom_errorbarh(aes(xmin = CI_Lower, xmax = CI_Upper), 
+                 height = 0, position = position_dodge(width = 0.5), alpha = 0.5) +
+  geom_point(size = 2, position = position_dodge(width = 0.5)) +
+  scale_x_continuous(trans = "log", 
+                     breaks = c(0.1, 0.25, 0.5, 1, 2, 4, 8),
+                     labels = c("0.1", "0.25", "0.5", "1.0", "2.0", "4.0", "8.0")) +
+  scale_color_viridis_d(option = "D") +
+  labs(
+    title = "Logistic Regression: Odds Ratios for Mortality by Cancer Type",
+    subtitle = "All variables included in the models",
+    x = "Odds Ratio (95% CI)",
+    y = "",
+    color = "Cancer Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.text.y = element_text(size = 9),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  )
+
+
+# Negative binomial forest plot
+all_nb_data <- data.frame()
+
+for(cancer in names(nb_results)) {
+  df <- nb_results[[cancer]]
+  df$Cancer <- cancer
+  df$Variable <- clean_var_names(df$Variable)
+  # Exclude intercept
+  df <- df[df$Variable != "Intercept", ]
+  all_nb_data <- rbind(all_nb_data, df)
+}
+
+# Create comprehensive forest plot for NB models
+ggplot(all_nb_data, 
+                      aes(x = IRR, y = reorder(Variable, IRR), color = Cancer)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50", alpha = 0.7) +
+  geom_errorbarh(aes(xmin = CI_Lower, xmax = CI_Upper), 
+                 height = 0, position = position_dodge(width = 0.5), alpha = 0.5) +
+  geom_point(size = 2, position = position_dodge(width = 0.5)) +
+  scale_x_continuous(trans = "log", 
+                     breaks = c(0.5, 0.75, 1, 1.5, 2, 3),
+                     labels = c("0.5", "0.75", "1.0", "1.5", "2.0", "3.0")) +
+  scale_color_viridis_d(option = "D") +
+  labs(
+    title = "Negative Binomial: Incidence Rate Ratios for Length of Stay",
+    subtitle = "All variables included in the models",
+    x = "IRR (95% CI)",
+    y = "",
+    color = "Cancer Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.text.y = element_text(size = 9),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  )
+```
+
+```{r}
+# ==========================
+# Complete Performance Metrics for Logistic Regression Models
+# ==========================
+
+# Function to calculate comprehensive model metrics
+calculate_comprehensive_metrics <- function(model, data, cancer_name) {
+  # Get predicted probabilities
+  pred_probs <- predict(model, newdata = data, type = "response", re.form = NA)
+  observed <- data$egresar_fallecido
+  
+  # ROC and AUC
+  roc_obj <- roc(observed, pred_probs, quiet = TRUE)
+  auc_value <- as.numeric(auc(roc_obj))
+  
+  # Optimal threshold using Youden's J
+  coords_optimal <- coords(roc_obj, "best", ret = c("threshold", "sensitivity", "specificity"), 
+                          best.method = "youden")
+  optimal_threshold <- coords_optimal$threshold
+  
+  # Create predictions using optimal threshold
+  pred_labels <- ifelse(pred_probs >= optimal_threshold, 1, 0)
+  
+  # Confusion matrix
+  cm <- confusionMatrix(factor(pred_labels, levels = c("0", "1")), 
+                        factor(observed, levels = c("0", "1")),
+                        positive = "1")
+  
+  # Extract metrics
+  tn <- as.numeric(cm$table[1,1])
+  fp <- as.numeric(cm$table[1,2])
+  fn <- as.numeric(cm$table[2,1])
+  tp <- as.numeric(cm$table[2,2])
+  
+  sensitivity <- tp / (tp + fn)
+  specificity <- tn / (tn + fp)
+  accuracy <- (tp + tn) / (tp + tn + fp + fn)
+  ppv <- tp / (tp + fp)
+  npv <- tn / (tn + fn)
+  f1_score <- 2 * (ppv * sensitivity) / (ppv + sensitivity)
+  balanced_accuracy <- (sensitivity + specificity) / 2
+  
+  # Matthews Correlation Coefficient
+  mcc_denominator <- sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+  mcc <- if(mcc_denominator == 0) 0 else ((tp * tn) - (fp * fn)) / mcc_denominator
+  
+  # Brier Score
+  brier_score <- mean((pred_probs - observed)^2)
+  
+  # Hosmer-Lemeshow test
+  hl_test <- hoslem.test(observed, pred_probs, g = 10)
+  
+  # Pseudo R-squared measures
+  null_model <- glm(egresar_fallecido ~ 1, data = data, family = binomial)
+  ll_full <- as.numeric(logLik(model))
+  ll_null <- as.numeric(logLik(null_model))
+  n <- nobs(model)
+  
+  mcfadden <- 1 - (ll_full / ll_null)
+  cox_snell <- 1 - exp((2/n) * (ll_null - ll_full))
+  nagelkerke <- cox_snell / (1 - exp(2 * ll_null / n))
+  
+  # Return comprehensive metrics
+  list(
+    metrics = data.frame(
+      Cancer = cancer_name,
+      N = n,
+      Events = sum(observed),
+      EventRate = mean(observed) * 100,
+      AUC = auc_value,
+      Sensitivity = sensitivity,
+      Specificity = specificity,
+      PPV = ppv,
+      NPV = npv,
+      Accuracy = accuracy,
+      BalancedAccuracy = balanced_accuracy,
+      F1Score = f1_score,
+      MCC = mcc,
+      BrierScore = brier_score,
+      OptimalThreshold = optimal_threshold,
+      HosmerLemeshow_Chi2 = hl_test$statistic,
+      HosmerLemeshow_p = hl_test$p.value,
+      McFadden = mcfadden,
+      CoxSnell = cox_snell,
+      Nagelkerke = nagelkerke,
+      AIC = AIC(model),
+      BIC = BIC(model),
+      LogLik = ll_full
+    ),
+    roc_obj = roc_obj,
+    pred_probs = pred_probs,
+    observed = observed
+  )
+}
+
+# Calculate metrics for all cancer types
+all_metrics <- list()
+for(cancer in names(logistic_models)) {
+  all_metrics[[cancer]] <- calculate_comprehensive_metrics(
+    logistic_models[[cancer]], 
+    datasets[[cancer]], 
+    cancer
+  )
+}
+
+# ==========================
+# Comprehensive Performance Table
+# ==========================
+
+performance_table <- bind_rows(lapply(all_metrics, function(x) x$metrics))
+
+# Format and display comprehensive table
+performance_table |>
+  mutate(
+    N = format(N, big.mark = ","),
+    Events = paste0(format(Events, big.mark = ","), " (", sprintf("%.1f%%", EventRate), ")"),
+    AUC = sprintf("%.3f", AUC),
+    Sensitivity = sprintf("%.3f", Sensitivity),
+    Specificity = sprintf("%.3f", Specificity),
+    PPV = sprintf("%.3f", PPV),
+    NPV = sprintf("%.3f", NPV),
+    Accuracy = sprintf("%.3f", Accuracy),
+    BalancedAccuracy = sprintf("%.3f", BalancedAccuracy),
+    F1Score = sprintf("%.3f", F1Score),
+    MCC = sprintf("%.3f", MCC),
+    BrierScore = sprintf("%.4f", BrierScore),
+    OptimalThreshold = sprintf("%.3f", OptimalThreshold),
+    HosmerLemeshow = paste0(sprintf("%.2f", HosmerLemeshow_Chi2), " (p=", sprintf("%.3f", HosmerLemeshow_p), ")"),
+    McFadden = sprintf("%.4f", McFadden),
+    Nagelkerke = sprintf("%.4f", Nagelkerke),
+    AIC = sprintf("%.1f", AIC),
+    BIC = sprintf("%.1f", BIC)
+  ) |>
+  dplyr::select(Cancer, N, Events, AUC, Sensitivity, Specificity, PPV, NPV, 
+         Accuracy, BalancedAccuracy, F1Score, MCC, BrierScore, 
+         OptimalThreshold, HosmerLemeshow, McFadden, Nagelkerke, AIC, BIC) |>
+  kable(caption = "<b>Table: Comprehensive Performance Metrics for Logistic Regression Models</b>",
+        format = "html",
+        escape = FALSE,
+        row.names = FALSE,
+        col.names = c("Cancer", "N", "Events (%)", "AUC", "Sens", "Spec", "PPV", "NPV", 
+                     "Acc", "Bal Acc", "F1", "MCC", "Brier", "Threshold", 
+                     "H-L Test", "McF R²", "Nagel R²", "AIC", "BIC")) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = TRUE,
+                font_size = 10) |>
+  row_spec(0, bold = TRUE, background = "#2c3e50", color = "white") |>
+  footnote(general = c("Sens: Sensitivity; Spec: Specificity; PPV: Positive Predictive Value; NPV: Negative Predictive Value",
+                      "Acc: Accuracy; Bal Acc: Balanced Accuracy; MCC: Matthews Correlation Coefficient",
+                      "H-L Test: Hosmer-Lemeshow goodness-of-fit test (p>0.05 indicates good calibration)",
+                      "McF R²: McFadden R²; Nagel R²: Nagelkerke R²"),
+           footnote_as_chunk = FALSE)
+
+# ==========================
+# ROC Curves for All Cancer Types
+# ==========================
+
+# Create ROC data for plotting
+roc_data <- data.frame()
+for(cancer in names(all_metrics)) {
+  roc_obj <- all_metrics[[cancer]]$roc_obj
+  roc_data <- rbind(roc_data,
+    data.frame(
+      FPR = 1 - roc_obj$specificities,
+      TPR = roc_obj$sensitivities,
+      Cancer = cancer,
+      AUC = as.numeric(auc(roc_obj))
+    )
+  )
+}
+
+# Create AUC labels
+auc_labels <- roc_data |>
+  group_by(Cancer) |>
+  summarise(AUC = first(AUC)) |>
+  mutate(label = paste0(Cancer, " (AUC = ", sprintf("%.3f", AUC), ")"))
+
+# ROC curves plot
+p_roc <- ggplot(roc_data, aes(x = FPR, y = TPR, color = Cancer)) +
+  geom_line(size = 1.2, alpha = 0.8) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray50", size = 0.8) +
+  scale_color_viridis_d(option = "D", labels = auc_labels$label) +
+  labs(
+    title = "ROC Curves for In-Hospital Mortality Prediction by Cancer Type",
+    subtitle = "Mixed Logistic Regression Models",
+    x = "False Positive Rate (1 - Specificity)",
+    y = "True Positive Rate (Sensitivity)",
+    color = ""
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray40"),
+    axis.title = element_text(size = 11),
+    legend.position = "bottom",
+    legend.text = element_text(size = 9),
+    panel.grid.minor = element_blank()
+  ) +
+  coord_equal() +
+  xlim(0, 1) + ylim(0, 1)
+
+print(p_roc)
+
+# ==========================
+# Calibration Plots
+# ==========================
+
+create_calibration_plot <- function(pred_probs, observed, cancer_name, n_groups = 10) {
+  # Create groups based on predicted probability deciles
+  prob_groups <- cut(pred_probs, 
+                     breaks = quantile(pred_probs, probs = seq(0, 1, 1/n_groups)),
+                     include.lowest = TRUE,
+                     labels = FALSE)
+  
+  # Calculate statistics by group
+  calib_data <- data.frame(
+    group = prob_groups,
+    pred_prob = pred_probs,
+    observed = observed
+  ) |>
+    group_by(group) |>
+    summarise(
+      n = n(),
+      mean_pred = mean(pred_prob),
+      mean_obs = mean(observed),
+      se_obs = sqrt(mean_obs * (1 - mean_obs) / n),
+      ci_lower = pmax(0, mean_obs - 1.96 * se_obs),
+      ci_upper = pmin(1, mean_obs + 1.96 * se_obs),
+      .groups = 'drop'
+    )
+  
+  # Create plot
+  ggplot(calib_data, aes(x = mean_pred, y = mean_obs)) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray50") +
+    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), 
+                  width = 0.02, alpha = 0.5) +
+    geom_point(aes(size = n), color = "darkblue", alpha = 0.7) +
+    geom_smooth(method = "loess", se = TRUE, color = "red", size = 0.8) +
+    labs(
+      title = paste("Calibration Plot -", cancer_name),
+      x = "Mean Predicted Probability",
+      y = "Observed Proportion",
+      size = "n"
+    ) +
+    scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 11, face = "bold"),
+      legend.position = "right"
+    )
+}
+
+# Create calibration plots for all cancer types
+calib_plots <- list()
+for(cancer in names(all_metrics)) {
+  calib_plots[[cancer]] <- create_calibration_plot(
+    all_metrics[[cancer]]$pred_probs,
+    all_metrics[[cancer]]$observed,
+    cancer
+  )
+}
+
+# Combine calibration plots
+p_calibration <- wrap_plots(calib_plots, ncol = 2) +
+  plot_annotation(
+    title = "Model Calibration Assessment by Cancer Type",
+    theme = theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+  )
+
+print(p_calibration)
+
+# ==========================
+# Performance Comparison Visualization
+# ==========================
+
+# Create performance comparison plot
+perf_long <- performance_table |>
+  dplyr::select(Cancer, AUC, Sensitivity, Specificity, F1Score, MCC) |>
+  pivot_longer(cols = -Cancer, names_to = "Metric", values_to = "Value") |>
+  mutate(Value = as.numeric(Value))
+
+p_performance <- ggplot(perf_long, aes(x = Cancer, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_viridis_d(option = "D") +
+  labs(
+    title = "Performance Metrics Comparison Across Cancer Types",
+    x = "Cancer Type",
+    y = "Metric Value",
+    fill = "Metric"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  ) +
+  ylim(0, 1)
+
+print(p_performance)
+
+```

@@ -1,0 +1,46 @@
+---
+title: "Characteristics of Hospitalization (length of stay, mortality, and comorbidities) for Patients with Stomach, Colorectal, Pancreatic, and Gallbladder Cancers in Chile, 2019-2023"
+author:
+  - name: "María Fernanda Gallego Muga"
+    email: "maria.gallego.muga@ug.uchile.cl"
+    orcid: "0000-0000-0000-0000"
+  - name: "Gregorio Palacios Pino"
+    email: "gregorio.palacios@ug.uchile.cl"
+    orcid: "0000-0000-0000-0000"
+  - name: "Valentina Meilan Ip Francesconi"
+    email: "valentina.ip@ug.uchile.cl "
+    orcid: "0000-0000-0000-0000"
+  - name: "Amaru Simón Agüero Jiménez"
+    email: "aaguero@miaundes.cl"
+    orcid: "0000-0001-7336-1833"
+date: "08/11/2024"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    number-depth: 3
+    code-fold: true
+execute:
+  warning: false #que los chunks no arrojen mensajes de emergencia
+  message: false #que los chunks no arrojen mensajes
+  fig-width: 12 #ancho de las figuras en el documento
+  fig-height: 10 #alto de las figuras
+---
+
+
+```{css, echo=FALSE}
+caption {
+  caption-side: top;
+  text-align: center;
+}
+```
+
+# Introduction, about the repository.
+
+This repository contains the source code used for the analysis of the characteristics of hospitalization (length of stay, mortality, and comorbidities) for patients with Stomach, Colorectal, Pancreatic, and Gallbladder Cancers in Chile, 2019-2023. The analysis is based on data from the Chilean Ministry of Health (MINSAL) and the National Health Fund (FONASA).
+
+- [Stage 1: Data administration.](https://amarusimonaguerojimenez.github.io/Characteristics-of-hospitalizations-for-digestive-neoplasms-in-Chile-2023/Stage1.html)
+
+
+
