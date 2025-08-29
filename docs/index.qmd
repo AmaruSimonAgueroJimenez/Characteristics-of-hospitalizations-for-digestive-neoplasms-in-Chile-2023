@@ -28,19 +28,11 @@ execute:
   fig-height: 10 #alto de las figuras
 ---
 
-
-```{css, echo=FALSE}
-caption {
-  caption-side: top;
-  text-align: center;
-}
-```
-
 # Introduction, about the repository.
 
 This repository contains the source code used for the analysis of the characteristics of hospitalization (length of stay, mortality, and comorbidities) for patients with Stomach, Colorectal, Pancreatic, and Gallbladder Cancers in Chile, 2019-2023. The analysis is based on data from the Chilean Ministry of Health (MINSAL) and the National Health Fund (FONASA).
 
-- [Stage 1: Data administration.](https://amarusimonaguerojimenez.github.io/Characteristics-of-hospitalizations-for-digestive-neoplasms-in-Chile-2023/Stage1.html)
+- [Stage 1: Data administration, explorations and models.](https://amarusimonaguerojimenez.github.io/Characteristics-of-hospitalizations-for-digestive-neoplasms-in-Chile-2023/stage1.html)
 
 
 
