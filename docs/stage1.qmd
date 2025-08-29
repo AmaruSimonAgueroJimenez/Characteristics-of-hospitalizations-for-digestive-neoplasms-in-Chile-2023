@@ -1,5 +1,5 @@
 ---
-title: "Malignant neoplasms of digestive organs C15-C26 in Chile from 2019 to 2023"
+title: "Characteristics of Hospitalization (length of stay, mortality, and comorbidities) for Patients with Stomach, Colorectal, Pancreatic, and Gallbladder Cancers in Chile, 2019-2023"
 author:
   - name: "María Fernanda Gallego Muga"
     email: "maria.gallego.muga@ug.uchile.cl"
@@ -31,8 +31,8 @@ format:
 execute:
   warning: false #que los chunks no arrojen mensajes de emergencia
   message: false #que los chunks no arrojen mensajes
-  fig-width: 12 #ancho de las figuras en el documento
-  fig-height: 10 #alto de las figuras
+  fig-width: 10 #ancho de las figuras en el documento
+  fig-height: 8 #alto de las figuras
 ---
 
 ```{r}
