@@ -35,6 +35,150 @@ execute:
   fig-height: 8 #alto de las figuras
 ---
 
+# Abstract (P(X=Decease))
+
+# Abstract (LOS)
+
+# Introduction
+
+In-hospital survival, the probability of discharge alive during a specific hospitalization, offers a pragmatic, short‑term outcome that integrates baseline disease severity at admission and the balance between medical–surgical effectiveness and complications during care. For digestive organ malignancies, this metric complements long-term survival by reflecting acute physiology, intercurrent complications, and differences in hospital processes of care that may vary by sector (public/private) and region.
+
+Gastrointestinal (GI) cancers collectively account for approximately 26% of incident cancers and 35% of cancer deaths worldwide, underscoring their disproportionate lethality [@Arnold2020]. Within this group, colorectal cancer (CRC) shows rising incidence in many countries and in younger cohorts, a pattern closely linked to lifestyle and metabolic exposures [@Keum2019]. In Chile, CRC incidence, mortality, and hospital discharges have increased over the past decade, with marked geographic and socioeconomic gradients in survival and access to higher‑complexity centers [@Mondschein2022; @Rios2020]. Gastric cancer remains a leading cause of cancer death in Chile and continues to present at advanced stages despite secular declines in many settings [@Caglevic2016]. Pancreatic cancer, characterized by high case‑fatality, has shown increasing burden globally, with only modest improvements in outcomes [@Arnold2020; @GBD2017_Pancreas2019]. Gallbladder cancer exhibits a unique Chilean footprint,among the highest incidence and mortality worldwide, shaped by gallstone prevalence, obesity, female predominance, and ethnic/territorial patterns, particularly in the south [@Olivares2016; @Koshiol2020].
+
+A lifestyle‑medicine lens is essential for these neoplasms because a substantial share of cancer burden is attributable to modifiable exposures, and multicomponent behavioral change can lower risk across sites. The World Cancer Research Fund/AICR Third Expert Report synthesizes convergent evidence that diet quality, body fatness, and physical activity exert causal effects for several GI cancers, with strong or probable evidence for specific factors (e.g., body fatness, processed/red meat, alcohol, dietary fiber, whole grains, and physical activity in CRC) [@WCRF2018; @WCRF2018_CRC; @Bouvard2015]. Independently, the IARC Working Group concludes that body fatness is causally linked to multiple digestive cancers—including CRC, gastric cardia, pancreas, and gallbladder—via endocrine, inflammatory, and insulin/IGF‑1 pathways [@LaubySecretan2016]. Alcohol confers dose‑dependent increases in risk for several digestive sites, including colorectum and liver, with accumulating evidence for pancreas; the most comprehensive dose–response meta‑analysis quantifies these gradients across 23 cancer types [@Bagnardi2015]. For gastric cancer, *Helicobacter pylori* eradication reduces incidence in randomized trials and is endorsed as a population‑level prevention strategy in high‑risk contexts, while dietary salt reduction and weight management may further attenuate risk [@IARC2014; @Ford2014].
+
+Chile’s cardiometabolic risk profile amplifies this etiologic substrate. The Third National Health Survey (ENS 2016–2017) documents high prevalence of excess adiposity alongside gains in tobacco control, patterns that co‑travel with hypertension, diabetes, and dyslipidemia and may compound peri‑operative risk, length of stay, and in‑hospital mortality for digestive cancers [@Bachelet2018]. At a global level, WHO estimates indicate that between one‑third and one‑half of cancers are preventable through risk‑factor modification, principally tobacco control, healthy weight, diet quality, alcohol reduction, and physical activity, reinforcing the public‑health salience of lifestyle‑based interventions across the cancer continuum [@WHO2025].
+
+Beyond incidence and aetiology, in‑hospital survival is tightly entwined with hospital length of stay (LOS), which captures recovery velocity, complication burden, and discharge readiness. In Chilean CRC cohorts implementing Enhanced Recovery After Surgery (ERAS), median LOS declined from roughly five to three days without safety trade‑offs, despite high baseline comorbidity (hypertension ≈58%, diabetes ≈22%) [@MartinezMardones2022_RevCir]. Contemporary multicentre series internationally report a median LOS near four days (mean ≈7) after colorectal resection, with prolonged LOS largely driven by postoperative complications such as anastomotic leak [@Huisman2024_AOSOpen]. For gastric cancer, Chilean experience with totally laparoscopic gastrectomy shows a median LOS around seven days, comparable to the Western LOGICA randomized trial in which laparoscopic and open gastrectomy both achieved a median of seven days, underscoring the roles of peri‑operative pathways and case mix beyond approach alone [@Norero2015_RevMedChile; @vanDerVeen2021_LOGICA]. Pancreatic resections remain the outlier for LOS: Chilean series of pancreatoduodenectomy report means approaching two weeks, reflecting the intrinsic morbidity of pancreatic surgery; nonetheless, randomized data in distal pancreatectomy and ERAS‑focused meta‑analyses demonstrate that minimally invasive techniques and standardized pathways can shorten LOS without compromising safety [@Losada2024_RevCir_Blumgart; @Bjornsson2020_LAPOP; @Kuemmerli2022_BJS; @Melloul2020_ERAS_PDAC]. In gallbladder cancer, where Chile bears a singular burden, the extent of liver resection correlates with morbidity and convalescence; in selected incidental gallbladder cancers, minimally invasive extended cholecystectomy can reduce LOS relative to open surgery in experienced centres [@Vega2023_ASO_IGBC; @Nakanishi2022_AJS; @Lee2022_LapExtendedChole; @Zeng2024_FrontSurg]. More broadly across GI operations, ERAS guideline adherence is associated with LOS reductions on the order of two days in randomized evidence syntheses [@Sauro2024_JAMAOpen].
+
+Lifestyle‑related comorbidities function as consistent modifiers of LOS and near‑term outcomes across digestive cancers. Diabetes mellitus independently increases the odds of prolonged LOS, 90‑day readmission, and short‑term mortality after colorectal resection in national cohorts, while higher Charlson Comorbidity Index scores are linearly associated with longer LOS and in‑hospital death following CRC surgery [@Gysling2024_AOSOpen; @Zhang2023_CMRO; @Tian2017_CCI_CRC]. Obesity reliably increases surgical‑site infection after CRC and is linked to longer LOS in settings without robust ERAS implementation; however, within structured ERAS programmes, the LOS penalty attributable to obesity often attenuates [@Gurunathan2017_JOGS; @Irani2023_ASCRS]. For gastrectomy, elevated BMI increases operative complexity and overall complications with heterogeneous effects on LOS across systems [@Tsekrekos2022_GastricBMI], and diabetes has been associated with slower postoperative recovery in some series [@Zhao2025_WJG]. In pancreatic surgery, obesity is consistently associated with higher complication rates and often longer LOS, and meticulous glycaemic management is key to recovery trajectories, particularly after total pancreatectomy [@Ramsey2011_JOGS; @Hajibandeh2025_ObesityPancreatectomy; @Zhao2023_TP]. Taken together, these data reinforce the dual relevance of lifestyle medicine, both upstream (primary risk attenuation) and peri‑operative (prehabilitation, nutrition, physical activity, smoking/alcohol cessation, and glycaemic control), to shorten LOS and improve in‑hospital survival [@WCRF2018; @Sauro2024_JAMAOpen; @WHO2025].
+
+Against this backdrop, quantifying and modeling in‑hospital survival for major digestive cancers—stomach, colorectal, pancreas, and gallbladder—in Chile (2019–2023), and evaluating the effect of coexisting lifestyle‑related comorbidities (hypertension, diabetes, dyslipidemia, and obesity), will fill a critical gap between etiologic/lifestyle knowledge and real‑world, short‑term outcomes. Such an approach can (i) stratify risk at admission, (ii) contextualize acute complications and fatality beyond staging alone, and (iii) generate actionable signals for hospital practice and prevention policy (screening and early detection, *H. pylori* strategies, diet/physical‑activity programs, alcohol and tobacco control) aligned with a lifestyle‑medicine framework [@WCRF2018; @WCRF2018_CRC; @IARC2014].
+
+# Methods
+
+## Study Design and Data Source
+
+A retrospective cohort study was conducted using hospital discharge data from the Chilean public health system covering the period 2019-2023. All hospitalization records containing International Classification of Diseases, 10th Revision (ICD-10) codes for gastrointestinal cancers were extracted. The analysis focused on four primary cancer sites: stomach (C16), colorectal (C18-C20), pancreas (C25), and gallbladder (C23).
+
+## Cancer Case Identification
+
+Cancer diagnoses were identified through systematic screening of all diagnostic fields (primary and secondary diagnoses, positions 1-35) in the discharge records. Cases were classified by primary cancer site based on the first occurrence of target ICD-10 codes in the diagnostic sequence. The diagnostic position was recorded to distinguish between primary admissions for cancer treatment and admissions where cancer was a secondary condition.
+
+## Lifestyle-Related Comorbidity Classification
+
+Fifteen lifestyle-related comorbidity groups were defined based on ICD-10 codes, encompassing conditions associated with modifiable lifestyle factors [@ford2012]. These groups included: obesity and overweight, dyslipidemia and metabolic disorders, diabetes and glucose disorders, hypertension, tobacco-related diseases, alcohol-related diseases, substance use disorders, nutritional deficiencies, non-alcoholic liver disease, sleep disorders, cardiovascular diseases, gastrointestinal disorders, musculoskeletal disorders related to sedentary behavior, and mental health conditions.
+
+For each patient, the presence of each comorbidity group was coded as a binary variable, and the total comorbidity burden was calculated as:
+
+$$N_{comorbidities} = \sum_{j=1}^{15} I_j$$
+
+where $I_j$ is an indicator variable for the presence of comorbidity group $j$.
+
+## Statistical Analyses
+
+### Descriptive Statistics
+
+Prevalence rates for each comorbidity were calculated by cancer site and discharge status (deceased vs. discharged alive). Temporal trends were assessed across the five-year study period.
+
+### Bivariate Associations
+
+The association between each comorbidity and mortality was assessed using chi-square tests for expected cell frequencies ≥5 and Fisher's exact test otherwise [@agresti2019]:
+
+$$\chi^2 = \sum_{i,j} \frac{(O_{ij} - E_{ij})^2}{E_{ij}}$$
+
+where $O_{ij}$ and $E_{ij}$ are observed and expected frequencies in the contingency table.
+
+Differences in length of stay (LOS) between patients with and without specific comorbidities were evaluated using the Wilcoxon rank-sum test [@hollander2013], with the test statistic:
+
+$$W = \sum_{i=1}^{n_1} R_i$$
+
+where $R_i$ represents the rank of observation $i$ from the first group in the combined sample.
+
+### Mixed-Effects Logistic Regression
+
+In-hospital mortality was modeled using generalized linear mixed models with a logit link function [@breslow1993]:
+
+$$\log\left(\frac{\pi_{ij}}{1-\pi_{ij}}\right) = \beta_0 + \mathbf{x}_{ij}^T\boldsymbol{\beta} + u_j$$
+
+where $\pi_{ij}$ is the probability of death for patient $i$ in year $j$, $\mathbf{x}_{ij}$ is the vector of covariates including age, sex, admission service category, severity indices, and significant comorbidities, $\boldsymbol{\beta}$ is the vector of fixed effects, and $u_j \sim N(0, \sigma^2_u)$ represents the random year effect.
+
+Only comorbidities showing significant association ($p < 0.05$) in bivariate analysis were included in the final models to avoid overfitting [@harrell2015]. The models were fitted using the Laplace approximation with the BOBYQA optimizer.
+
+### Negative Binomial Mixed Models
+
+Length of stay was modeled using negative binomial mixed models to account for overdispersion [@hilbe2011]:
+
+$$\log(\mu_{ij}) = \beta_0 + \mathbf{x}_{ij}^T\boldsymbol{\beta} + u_j$$
+
+$$Y_{ij} \sim NB(\mu_{ij}, \theta)$$
+
+where $\mu_{ij}$ is the expected LOS for patient $i$ in year $j$, $\theta$ is the dispersion parameter, and $u_j$ represents the random year effect. The negative binomial distribution was parameterized using the NB2 specification where variance equals $\mu + \mu^2/\theta$.
+
+### Model Performance Assessment
+
+Model discrimination was evaluated using the area under the receiver operating characteristic curve (AUC) [@hanley1982]:
+
+$$AUC = P(S_1 > S_0)$$
+
+where $S_1$ and $S_0$ are the predicted probabilities for positive and negative cases, respectively.
+
+Model calibration was assessed using the Hosmer-Lemeshow goodness-of-fit test [@hosmer2013], which compares observed and expected event rates across risk deciles:
+
+$$C = \sum_{g=1}^{10} \frac{(O_g - E_g)^2}{E_g(1 - E_g/n_g)}$$
+
+where $O_g$ and $E_g$ are observed and expected events in group $g$, and $n_g$ is the group size.
+
+### Measures of Explained Variation
+
+Three pseudo-R² measures were calculated [@nagelkerke1991]:
+
+1. McFadden's R²: 
+$$R^2_{McF} = 1 - \frac{\ln L_{full}}{\ln L_{null}}$$
+
+2. Cox-Snell R²: 
+$$R^2_{CS} = 1 - \exp\left(\frac{2(\ln L_{null} - \ln L_{full})}{n}\right)$$
+
+3. Nagelkerke's R²: 
+$$R^2_{N} = \frac{R^2_{CS}}{1 - \exp(2\ln L_{null}/n)}$$
+
+where $L_{full}$ and $L_{null}$ are the likelihoods of the full and null models, respectively.
+
+### Additional Performance Metrics
+
+Model performance was further evaluated using:
+
+- Sensitivity (true positive rate): $Se = TP/(TP + FN)$
+- Specificity (true negative rate): $Sp = TN/(TN + FP)$
+- Positive predictive value: $PPV = TP/(TP + FP)$
+- Negative predictive value: $NPV = TN/(TN + FN)$
+- F1 score: $F1 = 2 \cdot (PPV \cdot Se)/(PPV + Se)$
+- Matthews correlation coefficient [@matthews1975]:
+
+$$MCC = \frac{TP \cdot TN - FP \cdot FN}{\sqrt{(TP + FP)(TP + FN)(TN + FP)(TN + FN)}}$$
+
+- Brier score for probabilistic predictions [@brier1950]:
+
+$$BS = \frac{1}{n}\sum_{i=1}^{n}(p_i - o_i)^2$$
+
+where $p_i$ is the predicted probability and $o_i$ is the observed outcome.
+
+For negative binomial models, performance was assessed using root mean square error (RMSE) and mean absolute error (MAE):
+
+$$RMSE = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y}_i)^2}$$
+
+$$MAE = \frac{1}{n}\sum_{i=1}^{n}|y_i - \hat{y}_i|$$
+
+## Sensitivity Analyses
+
+Models were stratified by cancer site to account for disease-specific heterogeneity. Optimal probability thresholds for binary classification were determined using Youden's index [@youden1950]:
+
+$$J = \max(Se + Sp - 1)$$
+
+All statistical tests were two-sided with significance level set at $\alpha = 0.05$. Multiple testing adjustment was not applied due to the exploratory nature of the analysis [@rothman1990].
+
+# Results
+
 ```{r}
 # ==========================
 # Load/Install packages
@@ -330,6 +474,8 @@ if (file.exists(output_file)) {
       )
     )
   
+  data_cancer$service_category <- factor(data_cancer$service_category, 
+                                      levels = c("Others", "ICU", "ITU", "MS"))
   # ==========================
   # Save processed data
   # ==========================
@@ -1241,7 +1387,7 @@ for(cancer in cancer_types) {
 }
 
 kable(logistic_consolidated,
-      caption = "<b>Table: Refined Logistic Regression Models - Odds Ratios for In-Hospital Mortality</b>",
+      caption = "<b>Table: Logistic regression mixed models - Odds Ratios for In-Hospital Mortality</b>",
       format = "html",
       escape = FALSE,
       row.names = FALSE,
@@ -1287,7 +1433,7 @@ for(cancer in cancer_types) {
 }
 
 kable(nb_consolidated,
-      caption = "<b>Table: Refined Negative Binomial Models - Incidence Rate Ratios for Length of Stay</b>",
+      caption = "<b>Table: Negative Binomial Mixed Models - Incidence Rate Ratios for Length of Stay</b>",
       format = "html",
       escape = FALSE,
       row.names = FALSE,
@@ -1342,7 +1488,7 @@ for(cancer in names(nb_performance_refined)) {
 }
 
 kable(log_perf_summary,
-      caption = "<b>Table: Performance Metrics - Refined Logistic Regression Models</b>",
+      caption = "<b>Table: Performance Metrics - Negative Binomial Mixed Models</b>",
       format = "html",
       escape = FALSE,
       row.names = FALSE) |>
@@ -1354,7 +1500,7 @@ kable(log_perf_summary,
   row_spec(0, bold = TRUE, background = "#16a085", color = "white")
 
 kable(nb_perf_summary,
-      caption = "<b>Table: Performance Metrics - Refined Negative Binomial Models</b>",
+      caption = "<b>Table: Performance Metrics - Negative Binomial Mixed Models</b>",
       format = "html",
       escape = FALSE,
       row.names = FALSE,
@@ -1391,7 +1537,7 @@ ggplot(all_logistic_data,
                      labels = c("0.1", "0.25", "0.5", "1.0", "2.0", "4.0", "8.0")) +
   scale_color_viridis_d(option = "D") +
   labs(
-    title = "Refined Logistic Regression: Odds Ratios for Mortality by Cancer Type",
+    title = "Logistic Regression mixed models: Odds Ratios for Mortality by Cancer Type",
     subtitle = "Only significant comorbidities included",
     x = "Odds Ratio (95% CI)",
     y = "",
@@ -1426,7 +1572,7 @@ ggplot(all_nb_data,
                      labels = c("0.5", "0.75", "1.0", "1.5", "2.0", "3.0")) +
   scale_color_viridis_d(option = "D") +
   labs(
-    title = "Refined Negative Binomial: Incidence Rate Ratios for Length of Stay",
+    title = "Negative Binomial Mixed Models: Incidence Rate Ratios for Length of Stay",
     subtitle = "Only significant comorbidities included",
     x = "IRR (95% CI)",
     y = "",
@@ -1557,7 +1703,7 @@ performance_table |>
   dplyr::select(Cancer, N, Events, AUC, Sensitivity, Specificity, PPV, NPV, 
          Accuracy, BalancedAccuracy, F1Score, MCC, BrierScore, 
          OptimalThreshold, HosmerLemeshow, McFadden, Nagelkerke, AIC, BIC) |>
-  kable(caption = "<b>Table: Comprehensive Performance Metrics for Refined Logistic Regression Models</b>",
+  kable(caption = "<b>Table: Comprehensive Performance Metrics for Logistic Regression Mixed Models</b>",
         format = "html",
         escape = FALSE,
         row.names = FALSE,
@@ -1598,7 +1744,7 @@ p_roc <- ggplot(roc_data, aes(x = FPR, y = TPR, color = Cancer)) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray50", size = 0.8) +
   scale_color_viridis_d(option = "D", labels = auc_labels$label) +
   labs(
-    title = "ROC Curves for In-Hospital Mortality Prediction - Refined Models",
+    title = "ROC Curves for In-Hospital Mortality Prediction - Mixed Models",
     subtitle = "Mixed Logistic Regression with Significant Comorbidities Only",
     x = "False Positive Rate (1 - Specificity)",
     y = "True Positive Rate (Sensitivity)",
@@ -1673,7 +1819,7 @@ for(cancer in names(all_metrics)) {
 
 p_calibration <- wrap_plots(calib_plots, ncol = 2) +
   plot_annotation(
-    title = "Model Calibration Assessment - Refined Models",
+    title = "Model Calibration Assessment - Mixed Models",
     theme = theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
   )
 
@@ -1689,7 +1835,7 @@ p_performance <- ggplot(perf_long, aes(x = Cancer, y = Value, fill = Metric)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_viridis_d(option = "D") +
   labs(
-    title = "Performance Metrics Comparison - Refined Models",
+    title = "Performance Metrics Comparison - Mixed Models",
     x = "Cancer Type",
     y = "Metric Value",
     fill = "Metric"
